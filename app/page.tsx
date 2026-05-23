@@ -164,21 +164,27 @@ const flipCamera = async () => {
 
       {/* Buttons */}
       <div className="w-full max-w-sm pb-8 flex flex-col gap-3">
-        {cameraActive ? (
-          <>
-            <button
-              onClick={capturePhoto}
-              className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-lg transition shadow-lg active:scale-95"
-            >
-              📸 Capture Photo
-            </button>
-            <button
-              onClick={stopCamera}
-              className="w-full py-4 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-xl text-lg transition active:scale-95"
-            >
-              ✕ Cancel
-            </button>
-          </>
+{cameraActive ? (
+  <>
+    <button
+      onClick={capturePhoto}
+      className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-lg transition shadow-lg active:scale-95"
+    >
+      📸 Capture Photo
+    </button>
+    <button
+      onClick={flipCamera}
+      className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-lg transition active:scale-95"
+    >
+      🔄 Flip Camera
+    </button>
+    <button
+      onClick={stopCamera}
+      className="w-full py-4 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-xl text-lg transition active:scale-95"
+    >
+      ✕ Cancel
+    </button>
+  </>
         ) : (
           <>
             <button

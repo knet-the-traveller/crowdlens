@@ -1,65 +1,183 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import { useState, useRef, useEffect } from 'react';
+import { createBrowserClient } from '@supabase/ssr';
+import { processImageAndSave } from './actions/processImage';
+
+export default function CameraDashboard() {
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [uploading, setUploading] = useState(false);
+  const [status, setStatus] = useState('');
+  const [cameraActive, setCameraActive] = useState(false);
+  const [mockUser] = useState('member@pup.edu.ph');
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }, // rear camera on mobile
+        audio: false,
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        setCameraActive(true);
+        setStatus('');
+      }
+    } catch (err) {
+      // Fallback to file picker if camera access is denied
+      fileInputRef.current?.click();
+    }
+  };
+
+  const stopCamera = () => {
+    const stream = videoRef.current?.srcObject as MediaStream;
+    stream?.getTracks().forEach(track => track.stop());
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setCameraActive(false);
+  };
+
+  const capturePhoto = async () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    canvas.getContext('2d')?.drawImage(video, 0, 0);
+
+    stopCamera();
+
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      const file = new File([blob], `snapshot_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      await uploadFile(file);
+    }, 'image/jpeg', 0.9);
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) await uploadFile(file);
+  };
+
+  const uploadFile = async (file: File) => {
+    try {
+      setUploading(true);
+      setStatus('Uploading snapshot to storage...');
+
+      const fileName = `${Date.now()}.jpg`;
+      const { error: storageError } = await supabase.storage
+        .from('event_gallery')
+        .upload(fileName, file);
+
+      if (storageError) throw storageError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('event_gallery')
+        .getPublicUrl(fileName);
+
+      setStatus('AI is analyzing composition and awarding points...');
+
+      const response = await processImageAndSave(publicUrl, mockUser);
+
+      if (response.success && response.result) {
+        setStatus(`✨ Success! Gemini awarded you ${response.result.points} points! Tagged: ${response.result.tags.join(', ')}`);
+      } else {
+        setStatus('Photo saved, but AI assessment timed out.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      setStatus(`Upload failed: ${err.message || 'Error encountered'}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Cleanup camera on unmount
+  useEffect(() => {
+    return () => stopCamera();
+  }, []);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <main className="min-h-screen bg-slate-900 text-white flex flex-col items-center justify-between p-6">
+      <header className="w-full text-center py-4">
+        <h1 className="text-2xl font-bold tracking-tight text-emerald-400">CrowdLens</h1>
+        <p className="text-xs text-slate-400 mt-1">Build with AI Documentation Portal</p>
+      </header>
+
+      {/* Viewfinder */}
+      <div className="w-full max-w-sm aspect-square bg-slate-800 rounded-2xl border-2 border-dashed border-slate-700 overflow-hidden flex flex-col items-center justify-center text-center shadow-xl relative">
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          className={`w-full h-full object-cover ${cameraActive ? 'block' : 'hidden'}`}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+        <canvas ref={canvasRef} className="hidden" />
+
+        {!cameraActive && (
+          <div className="space-y-2 p-6">
+            <p className="text-sm text-slate-300 px-4">
+              {uploading
+                ? <span className="animate-pulse">{status}</span>
+                : status || 'Ready for action. Tap below to open camera!'}
+            </p>
+            {uploading && (
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-400 mx-auto mt-4"></div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Hidden fallback file input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+      />
+
+      {/* Buttons */}
+      <div className="w-full max-w-sm pb-8 flex flex-col gap-3">
+        {cameraActive ? (
+          <>
+            <button
+              onClick={capturePhoto}
+              className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-xl text-lg transition shadow-lg active:scale-95"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              📸 Capture Photo
+            </button>
+            <button
+              onClick={stopCamera}
+              className="w-full py-4 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-xl text-lg transition active:scale-95"
             >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+              ✕ Cancel
+            </button>
+          </>
+        ) : (
+          <>
+            <button
+              onClick={startCamera}
+              disabled={uploading}
+              className="w-full py-4 bg-emerald-500 hover:bg-emerald-400 disabled:bg-slate-700 text-slate-950 font-bold rounded-xl text-lg transition shadow-lg active:scale-95"
+            >
+              {uploading ? 'Processing...' : '📷 Snap & Upload'}
+            </button>
+            
+<a href="/gallery" className="text-xs text-slate-400 underline text-center block mt-4">
+  View Gallery →
+</a>
+          </>
+        )}
+      </div>
+    </main>
   );
 }

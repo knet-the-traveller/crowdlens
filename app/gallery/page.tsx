@@ -12,16 +12,16 @@ export default function GalleryPage() {
   const [photos, setPhotos] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchPhotos = async () => {
-    const { data } = await supabase
-      .from('event_photos')
-      .select('*')
-      .eq('is_usable', true)
-      .order('created_at', { ascending: false });
+const fetchPhotos = async () => {
+  const { data } = await supabase
+    .from('event_photos')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(1000);
 
-    setPhotos(data ?? []);
-    setLoading(false);
-  };
+  setPhotos(data ?? []);
+  setLoading(false);
+};
 
   useEffect(() => {
     fetchPhotos();

@@ -19,22 +19,37 @@ export default function CameraDashboard() {
   const [cameraActive, setCameraActive] = useState(false);
   const [mockUser] = useState('member@pup.edu.ph');
 
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
   const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }, // rear camera on mobile
-        audio: false,
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        setCameraActive(true);
-        setStatus('');
-      }
-    } catch (err) {
-      // Fallback to file picker if camera access is denied
-      fileInputRef.current?.click();
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: facingMode }, // uses current facing mode
+      audio: false,
+    });
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      setCameraActive(true);
+      setStatus('');
     }
-  };
+  } catch (err) {
+    fileInputRef.current?.click();
+  }
+};
+
+const flipCamera = async () => {
+  stopCamera();
+  const newMode = facingMode === 'environment' ? 'user' : 'environment';
+  setFacingMode(newMode);
+  
+  const stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: newMode },
+    audio: false,
+  });
+  if (videoRef.current) {
+    videoRef.current.srcObject = stream;
+    setCameraActive(true);
+  }
+};
 
   const stopCamera = () => {
     const stream = videoRef.current?.srcObject as MediaStream;
@@ -98,6 +113,8 @@ export default function CameraDashboard() {
       setUploading(false);
     }
   };
+
+  
 
   // Cleanup camera on unmount
   useEffect(() => {
